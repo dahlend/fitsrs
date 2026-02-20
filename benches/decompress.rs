@@ -38,16 +38,24 @@ fn decompress(filename: &str) {
             match hdu_list.get_data(&hdu) {
                 BinaryTableData::TileCompressed(bintable::tile_compressed::pixels::Pixels::U8(
                     pixels,
-                )) => assert!(width * height == pixels.count()),
+                )) => {
+                    assert!(width * height == pixels.count())
+                }
                 BinaryTableData::TileCompressed(
                     bintable::tile_compressed::pixels::Pixels::I16(pixels),
-                ) => assert!(width * height == pixels.count()),
+                ) => {
+                    assert!(width * height == pixels.count())
+                }
                 BinaryTableData::TileCompressed(
                     bintable::tile_compressed::pixels::Pixels::I32(pixels),
-                ) => assert!(width * height == pixels.count()),
+                ) => {
+                    assert!(width * height == pixels.count())
+                }
                 BinaryTableData::TileCompressed(
                     bintable::tile_compressed::pixels::Pixels::F32(pixels),
-                ) => assert!(width * height == pixels.count()),
+                ) => {
+                    assert!(width * height == pixels.count())
+                }
                 _ => unreachable!(),
             }
         }

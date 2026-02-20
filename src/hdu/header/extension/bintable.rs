@@ -264,7 +264,9 @@ impl Xtension for BinTable {
         };
 
         let z_bitpix = values.get_parsed("ZBITPIX").unwrap_or_else(|err| {
-            warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any: {err}");
+            warn!(
+        "ZBITPIX is not valid. The tile compressed image column will be discarded if any: {err}"
+      );
             None
         });
 
@@ -344,117 +346,117 @@ impl Xtension for BinTable {
 
         // TFORMS & TTYPES
         let (tforms, ttypes): (Vec<_>, Vec<_>) = (1..=tfields)
-            .filter_map(|idx_field| {
-                // discard the tform if it was not found and raise a warning
-                let tform_kw = format!("TFORM{idx_field}");
-                let tform = if let Ok(value) = values.get_parsed::<String>(&tform_kw) {
-                    Some(value)
-                } else {
-                    warn!("{tform_kw} has not been found. It will be discarded");
-                    None
-                }?;
+      .filter_map(|idx_field| {
+        // discard the tform if it was not found and raise a warning
+        let tform_kw = format!("TFORM{idx_field}");
+        let tform = if let Ok(value) = values.get_parsed::<String>(&tform_kw) {
+          Some(value)
+        } else {
+          warn!("{tform_kw} has not been found. It will be discarded");
+          None
+        }?;
 
-                // try to find a ttype (optional keyword)
-                let ttype = if let Ok(value) = values.get_parsed(&format!("TTYPE{idx_field}")) {
-                    Some(value)
-                } else {
-                    warn!("Field {tform_kw:?} does not have a TTYPE name.");
-                    None
-                };
+        // try to find a ttype (optional keyword)
+        let ttype = if let Ok(value) = values.get_parsed(&format!("TTYPE{idx_field}")) {
+          Some(value)
+        } else {
+          warn!("Field {tform_kw:?} does not have a TTYPE name.");
+          None
+        };
 
-                let count = tform
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit())
-                    .collect::<String>();
+        let count = tform
+          .chars()
+          .take_while(|c| c.is_ascii_digit())
+          .collect::<String>();
 
-                let num_count_digits = count.len();
-                let repeat_count = count.parse::<usize>().unwrap_or(1);
-                // If the field type is not found, discard it as well
-                let Some(field_ty) = tform.chars().nth(num_count_digits) else {
-                    warn!("Cannot extract the field type of {tform_kw}");
-                    return None;
-                };
+        let num_count_digits = count.len();
+        let repeat_count = count.parse::<usize>().unwrap_or(1);
+        // If the field type is not found, discard it as well
+        let Some(field_ty) = tform.chars().nth(num_count_digits) else {
+          warn!("Cannot extract the field type of {tform_kw}");
+          return None;
+        };
 
-                let compute_ty_array_desc = || {
-                    // Get the type element of the stored array
-                    let Some(elem_ty) = tform.chars().nth(num_count_digits + 1) else {
-                        warn!("Could not extract the type from the array descriptor field. Discard {tform_kw}");
-                        return None;
-                    };
+        let compute_ty_array_desc = || {
+          // Get the type element of the stored array
+          let Some(elem_ty) = tform.chars().nth(num_count_digits + 1) else {
+            warn!("Could not extract the type from the array descriptor field. Discard {tform_kw}");
+            return None;
+          };
 
-                    let (t_byte_size, ty) = match elem_ty {
-                        'L' => (L::BYTES_SIZE, VariableArrayTy::L),
-                        'X' => (X::BYTES_SIZE, VariableArrayTy::X),
-                        'B' => (B::BYTES_SIZE, VariableArrayTy::B),
-                        'I' => (I::BYTES_SIZE, VariableArrayTy::I),
-                        'J' => (J::BYTES_SIZE, VariableArrayTy::J),
-                        'K' => (K::BYTES_SIZE, VariableArrayTy::K),
-                        'A' => (A::BYTES_SIZE, VariableArrayTy::A),
-                        'E' => (E::BYTES_SIZE, VariableArrayTy::E),
-                        'D' => (D::BYTES_SIZE, VariableArrayTy::D),
-                        'C' => (C::BYTES_SIZE, VariableArrayTy::C),
-                        'M' => (M::BYTES_SIZE, VariableArrayTy::M),
-                        _ => {
-                            warn!("Type not recognized. Discard {tform_kw}");
-                            return None;
-                        },
-                    };
+          let (t_byte_size, ty) = match elem_ty {
+            'L' => (L::BYTES_SIZE, VariableArrayTy::L),
+            'X' => (X::BYTES_SIZE, VariableArrayTy::X),
+            'B' => (B::BYTES_SIZE, VariableArrayTy::B),
+            'I' => (I::BYTES_SIZE, VariableArrayTy::I),
+            'J' => (J::BYTES_SIZE, VariableArrayTy::J),
+            'K' => (K::BYTES_SIZE, VariableArrayTy::K),
+            'A' => (A::BYTES_SIZE, VariableArrayTy::A),
+            'E' => (E::BYTES_SIZE, VariableArrayTy::E),
+            'D' => (D::BYTES_SIZE, VariableArrayTy::D),
+            'C' => (C::BYTES_SIZE, VariableArrayTy::C),
+            'M' => (M::BYTES_SIZE, VariableArrayTy::M),
+            _ => {
+              warn!("Type not recognized. Discard {tform_kw}");
+              return None;
+            }
+          };
 
-                    Some((t_byte_size, ty))
-                };
+          Some((t_byte_size, ty))
+        };
 
-                let tformty = match field_ty {
-                    // Logical
-                    'L' => TFormType::L { repeat_count },
-                    // Bit
-                    'X' => TFormType::X { repeat_count },
-                    // Unsigned Byte
-                    'B' => TFormType::B { repeat_count },
-                    // 16-bit integer
-                    'I' => TFormType::I { repeat_count },
-                    // 32-bit integer
-                    'J' => TFormType::J { repeat_count },
-                    // 64-bit integer
-                    'K' => TFormType::K { repeat_count },
-                    // Character
-                    'A' => TFormType::A { repeat_count },
-                    // Single-precision floating point
-                    'E' => TFormType::E { repeat_count },
-                    // Double-precision floating point
-                    'D' => TFormType::D { repeat_count },
-                    // Single-precision complex
-                    'C' => TFormType::C { repeat_count },
-                    // Double-precision complex
-                    'M' => TFormType::M { repeat_count },
-                    // Array Descriptor 32-bit
-                    'P' => {
-                        let (t_byte_size, ty) = compute_ty_array_desc()?;
+        let tformty = match field_ty {
+          // Logical
+          'L' => TFormType::L { repeat_count },
+          // Bit
+          'X' => TFormType::X { repeat_count },
+          // Unsigned Byte
+          'B' => TFormType::B { repeat_count },
+          // 16-bit integer
+          'I' => TFormType::I { repeat_count },
+          // 32-bit integer
+          'J' => TFormType::J { repeat_count },
+          // 64-bit integer
+          'K' => TFormType::K { repeat_count },
+          // Character
+          'A' => TFormType::A { repeat_count },
+          // Single-precision floating point
+          'E' => TFormType::E { repeat_count },
+          // Double-precision floating point
+          'D' => TFormType::D { repeat_count },
+          // Single-precision complex
+          'C' => TFormType::C { repeat_count },
+          // Double-precision complex
+          'M' => TFormType::M { repeat_count },
+          // Array Descriptor 32-bit
+          'P' => {
+            let (t_byte_size, ty) = compute_ty_array_desc()?;
 
-                        TFormType::P {
-                            t_byte_size: t_byte_size as u64,
-                            e_max: 999,
-                            ty,
-                        }
-                    },
-                    // Array Descriptor 64-bit
-                    'Q' => {
-                        let (t_byte_size, ty) = compute_ty_array_desc()?;
+            TFormType::P {
+              t_byte_size: t_byte_size as u64,
+              e_max: 999,
+              ty,
+            }
+          }
+          // Array Descriptor 64-bit
+          'Q' => {
+            let (t_byte_size, ty) = compute_ty_array_desc()?;
 
-                        TFormType::Q {
-                            t_byte_size: t_byte_size as u64,
-                            e_max: 999,
-                            ty,
-                        }
-                    },
-                    _ => {
-                        warn!("Field type not recognized. Discard {tform_kw}");
-                        return None;
-                    }
-                };
+            TFormType::Q {
+              t_byte_size: t_byte_size as u64,
+              e_max: 999,
+              ty,
+            }
+          }
+          _ => {
+            warn!("Field type not recognized. Discard {tform_kw}");
+            return None;
+          }
+        };
 
-                Some((tformty, ttype))
-            })
-            .unzip();
+        Some((tformty, ttype))
+      })
+      .unzip();
 
         let data_compressed_idx = find_field_by_ttype(&ttypes, "COMPRESSED_DATA")
             // Find for a GZIP_DATA_COMPRESSED named field

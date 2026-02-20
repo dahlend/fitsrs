@@ -478,7 +478,25 @@ impl<'de> Deserializer<'de> for &'de Value {
             Value::Integer { value, comment: _ } => visitor.visit_i64(*value),
             Value::Float { value, comment: _ } => visitor.visit_f64(*value),
             Value::Logical { value, comment: _ } => visitor.visit_bool(*value),
-            Value::String { value, comment: _ } => visitor.visit_borrowed_str(value),
+            Value::String { value, comment: _ } => {
+                // Try to coerce quoted strings containing numeric text into numeric
+                // types when the caller expects a numeric type. We trim whitespace
+                // and attempt integer, unsigned, then float parsing. If none
+                // match, fall back to returning the string.
+                let s = value.trim();
+                if s.is_empty() {
+                    // Empty string -> unit
+                    visitor.visit_unit()
+                } else if let Ok(i) = s.parse::<i64>() {
+                    visitor.visit_i64(i)
+                } else if let Ok(u) = s.parse::<u64>() {
+                    visitor.visit_u64(u)
+                } else if let Ok(f) = s.parse::<f64>() {
+                    visitor.visit_f64(f)
+                } else {
+                    visitor.visit_borrowed_str(value)
+                }
+            }
             Value::Undefined => visitor.visit_unit(),
             Value::Invalid(s) => visitor.visit_borrowed_str(s),
         }
@@ -907,9 +925,9 @@ mod tests {
             } = &value
             {
                 assert_eq!(
-                    comment,
-                    " The comment field for this\n keyword is also continued\n over multiple cards."
-                );
+          comment,
+          " The comment field for this\n keyword is also continued\n over multiple cards."
+        );
             } else {
                 panic!("Comment is None")
             }

@@ -12,8 +12,6 @@ use futures::{Future, Stream};
 use serde::Serialize;
 use std::fmt::Debug;
 
-//use crate::hdu::data::{DataAsyncBufRead, DataBufRead};
-
 #[derive(Debug, Serialize)]
 pub struct AsyncFits<R> {
     start: bool,

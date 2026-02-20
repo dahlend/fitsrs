@@ -14,7 +14,6 @@ use crate::card::Value;
 
 use crate::hdu::data::FitsRead;
 
-//use self::data::DataAsyncBufRead;
 use crate::error::Error;
 
 use self::data::AsyncDataBufRead;
@@ -25,8 +24,6 @@ use self::header::extension::image::Image;
 use self::header::extension::XtensionType;
 use crate::hdu::Value::Logical;
 
-//use super::data::DataAsyncBufRead;
-//use super::AsyncHDU;
 use crate::async_fits;
 use crate::fits;
 use crate::hdu::primary::consume_next_card;
