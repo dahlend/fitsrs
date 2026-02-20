@@ -33,6 +33,33 @@ pub fn consume_next_card<R: Read>(
     Ok(())
 }
 
+/// Return true if the provided keyword is expected to be numeric and therefore
+/// we should try coercing quoted string values into numeric types.
+fn should_coerce_to_number(key: &str) -> bool {
+    // Exact keyword names that are numeric
+    const EXACT: &[&str] = &[
+        "BITPIX", "NAXIS", "GCOUNT", "PCOUNT", "TFIELDS", "BSCALE", "BZERO", "DATAMAX", "DATAMIN",
+        "EXPOSURE",
+    ];
+    if EXACT.contains(&key) {
+        return true;
+    }
+
+    // Prefix-based numeric keywords commonly followed by an index, e.g. NAXIS1, CRPIX2
+    const PREFIXES: &[&str] = &["NAXIS", "CRPIX", "CRVAL", "CDELT", "CD", "PC"];
+
+    for p in PREFIXES {
+        if key.starts_with(p) {
+            let rest = &key[p.len()..];
+            if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 pub async fn consume_next_card_async<R: AsyncRead + std::marker::Unpin>(
     reader: &mut R,
     buf: &mut [u8; 80],
@@ -103,9 +130,43 @@ impl ValueMap {
         T: Deserialize<'de>,
     {
         // We use `Value::Undefined` fallback to handle `T` being an `Option<_>`.
-        T::deserialize(self.get(key).unwrap_or(&Value::Undefined))
-    }
+        let val = self.get(key).unwrap_or(&Value::Undefined);
 
+        // Only attempt coercion from string -> numeric for a known set of numeric keywords
+        if should_coerce_to_number(key) {
+            if let Value::String {
+                value: s,
+                comment: _,
+            } = val
+            {
+                let s_trim = s.trim();
+                if s_trim.is_empty() {
+                    return T::deserialize(&Value::Undefined);
+                }
+
+                // Try integer (i64)
+                if let Ok(i) = s_trim.parse::<i64>() {
+                    return T::deserialize(i.into_deserializer());
+                }
+
+                // Try unsigned (u64) and represent as Integer if it fits otherwise as Float
+                if let Ok(u) = s_trim.parse::<u64>() {
+                    if u <= i64::MAX as u64 {
+                        return T::deserialize((u as i64).into_deserializer());
+                    } else {
+                        return T::deserialize((u as f64).into_deserializer());
+                    }
+                }
+
+                // Try float
+                if let Ok(f) = s_trim.parse::<f64>() {
+                    return T::deserialize(f.into_deserializer());
+                }
+            }
+        }
+
+        T::deserialize(val)
+    }
     /// Return an iterator over all key-[value](Card::Value) pairs in the FITS
     /// header.
     pub fn iter(&self) -> ValueMapIter<'_> {
@@ -459,6 +520,27 @@ mod tests {
             assert_eq!(history.next(), None);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn numeric_string_parsed() -> Result<(), Error> {
+        // NAXIS provided as a quoted string should be parsed as a number
+        let data = mock_fits_data([
+            b"SIMPLE  =                    T / this is a fake FITS file                       ",
+            b"BITPIX  =                    8 / byte sized numbers                             ",
+            b"NAXIS   =                    '0' / no data arrays                               ",
+            b"END                                                                             ",
+        ]);
+        let reader = Cursor::new(data);
+        let mut fits = Fits::from_reader(reader);
+        let hdu = fits.next().expect("Should contain a primary HDU").unwrap();
+        if let HDU::Primary(hdu) = hdu {
+            // NAXIS should parse as u64 even if provided as a quoted string
+            assert_eq!(hdu.get_header().get_parsed::<u64>("NAXIS")?, 0u64);
+        } else {
+            panic!("expected primary hdu");
+        }
         Ok(())
     }
 
